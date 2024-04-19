@@ -138,6 +138,11 @@ endif()
 #编译静态库
 #Compile static library
 add_library(${PROJECT_NAME}_static STATIC ${SRC_LIST})
+
+if (ANDROID)
+    target_link_libraries(${PROJECT_NAME}_static android log)
+endif ()
+
 #引用头文件路径
 #Reference header file path
 target_include_directories(${PROJECT_NAME}_static PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
