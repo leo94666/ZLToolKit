@@ -5,7 +5,7 @@ sudo apt install cmake
 abi=$1
 
 cd ..
-git clone --depth=50 https://github.com/xia-chu/ZLToolKit.git
+git clone --depth=50 https://github.com/leo94666/ZLToolKit.git
 cd ZLToolKit
 mkdir -p android_build
 rm -rf ./build
