@@ -13,10 +13,10 @@
 #include "Common/Parser.h"
 #include "Common/config.h"
 #include "Common/strCoding.h"
+#include "Record/HlsMediaSource.h"
 #include "HttpConst.h"
 #include "HttpSession.h"
 #include "HttpFileManager.h"
-#include "Common/MediaSource.h"
 
 using namespace std;
 using namespace toolkit;
@@ -42,7 +42,7 @@ struct HttpCookieAttachment {
     //上次鉴权失败信息,为空则上次鉴权成功
     string _err_msg;
     //hls直播时的其他一些信息，主要用于播放器个数计数以及流量计数
-    //HlsCookieData::Ptr _hls_data;
+    HlsCookieData::Ptr _hls_data;
 };
 
 const string &HttpFileManager::getContentType(const char *name) {
@@ -282,6 +282,20 @@ static bool makeFolderMenu(const string &httpPath, const string &strFullPath, st
     return true;
 }
 
+//拦截hls的播放请求
+static bool emitHlsPlayed(const Parser &parser, const MediaInfo &media_info, const HttpSession::HttpAccessPathInvoker &invoker,Session &sender){
+    //访问的hls.m3u8结尾，我们转换成kBroadcastMediaPlayed事件
+    Broadcast::AuthInvoker auth_invoker = [invoker](const string &err) {
+        //cookie有效期为kHlsCookieSecond
+        invoker(err, "", kHlsCookieSecond);
+    };
+    bool flag = NOTICE_EMIT(BroadcastMediaPlayedArgs, Broadcast::kBroadcastMediaPlayed, media_info, auth_invoker, sender);
+    if (!flag) {
+        //未开启鉴权，那么允许播放
+        auth_invoker("");
+    }
+    return flag;
+}
 
 class SockInfoImp : public SockInfo{
 public:
@@ -344,11 +358,11 @@ static void canAccessPath(Session &sender, const Parser &parser, const MediaInfo
             //上次cookie是限定本目录
             if (attach._err_msg.empty()) {
                 //上次鉴权成功
-//                if (attach._hls_data) {
-//                    //如果播放的是hls，那么刷新hls的cookie(获取ts文件也会刷新)
-//                    cookie->updateTime();
-//                    update_cookie = true;
-//                }
+                if (attach._hls_data) {
+                    //如果播放的是hls，那么刷新hls的cookie(获取ts文件也会刷新)
+                    cookie->updateTime();
+                    update_cookie = true;
+                }
                 callback("", update_cookie ? cookie : nullptr);
                 return;
             }
@@ -389,6 +403,10 @@ static void canAccessPath(Session &sender, const Parser &parser, const MediaInfo
             attach->_path = cookie_path;
             //记录能否访问
             attach->_err_msg = err_msg;
+            if (is_hls) {
+                // hls相关信息
+                attach->_hls_data = std::make_shared<HlsCookieData>(media_info, info);
+            }
            toolkit::Any any;
            any.set(std::move(attach));
            callback(err_msg, HttpCookieManager::Instance().addCookie(kCookieName, uid, life_second, std::move(any)));
